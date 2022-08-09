@@ -122,6 +122,19 @@ impl<M: Message> MavConnection<M> for TcpConnection {
         self.protocol_version
     }
 
+    fn shutdown(&mut self) -> io::Result<()> {
+        self.reader
+            .lock()
+            .unwrap()
+            .shutdown(std::net::Shutdown::Both)?;
+        self.writer
+            .lock()
+            .unwrap()
+            .socket
+            .shutdown(std::net::Shutdown::Both)?;
+        Ok(())
+    }
+
     fn reconnect(&mut self) -> io::Result<()> {
         if self.address.starts_with("tcpout:") {
             *self = tcpout(&self.address["tcpout:".len()..])?;

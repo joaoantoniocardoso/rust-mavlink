@@ -25,6 +25,11 @@ pub trait MavConnection<M: Message> {
 
     fn set_protocol_version(&mut self, version: MavlinkVersion);
     fn get_protocol_version(&self) -> MavlinkVersion;
+
+    fn shutdown(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+
     fn reconnect(&mut self) -> io::Result<()> {
         Ok(())
     }
