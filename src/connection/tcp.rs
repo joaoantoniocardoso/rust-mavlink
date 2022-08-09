@@ -1,7 +1,7 @@
 use crate::connection::MavConnection;
 use crate::{read_versioned_msg, write_versioned_msg, MavHeader, MavlinkVersion, Message};
 use std::io::{self};
-use std::net::{ToSocketAddrs, SocketAddr};
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -23,7 +23,10 @@ pub fn select_protocol<M: Message>(
     }
 }
 
-pub fn tcpout<T: ToSocketAddrs>(address: T) -> io::Result<TcpConnection> where T: std::fmt::Display  {
+pub fn tcpout<T: ToSocketAddrs>(address: T) -> io::Result<TcpConnection>
+where
+    T: std::fmt::Display,
+{
     let addr = address
         .to_socket_addrs()
         .unwrap()
@@ -43,7 +46,10 @@ pub fn tcpout<T: ToSocketAddrs>(address: T) -> io::Result<TcpConnection> where T
     })
 }
 
-pub fn tcpin<T: ToSocketAddrs>(address: T) -> io::Result<TcpConnection> where T: std::fmt::Display {
+pub fn tcpin<T: ToSocketAddrs>(address: T) -> io::Result<TcpConnection>
+where
+    T: std::fmt::Display,
+{
     let addr = address
         .to_socket_addrs()
         .unwrap()
@@ -116,11 +122,12 @@ impl<M: Message> MavConnection<M> for TcpConnection {
         self.protocol_version
     }
 
-    fn reconnect(&mut self) {
+    fn reconnect(&mut self) -> io::Result<()> {
         if self.address.starts_with("tcpout:") {
-            *self = tcpout(&self.address["tcpout:".len()..]).unwrap();
+            *self = tcpout(&self.address["tcpout:".len()..])?;
         } else {
-            *self = tcpin(&self.address["tcpin:".len()..]).unwrap();
+            *self = tcpin(&self.address["tcpin:".len()..])?;
         }
+        Ok(())
     }
 }
