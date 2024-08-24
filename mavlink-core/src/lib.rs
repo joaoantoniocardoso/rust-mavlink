@@ -567,6 +567,15 @@ impl MAVLinkV2MessageRaw {
     }
 
     #[inline]
+    pub fn signature_lenght(&self) -> u8 {
+        if (self.incompatibility_flags() & MAVLINK_IFLAG_SIGNED) == 0 {
+            0
+        } else {
+            Self::SIGNATURE_SIZE as u8
+        }
+    }
+
+    #[inline]
     pub fn incompatibility_flags(&self) -> u8 {
         self.0[2]
     }
@@ -681,14 +690,10 @@ impl MAVLinkV2MessageRaw {
         let payload_length: usize = self.payload_length().into();
 
         // Signature to ensure the link is tamper-proof.
-        let signature_size = if (self.incompatibility_flags() & MAVLINK_IFLAG_SIGNED) == 0 {
-            0
-        } else {
-            Self::SIGNATURE_SIZE
-        };
+        let signature_length: usize = self.signature_lenght().into();
 
-        &mut self.0
-            [(1 + Self::HEADER_SIZE)..(1 + Self::HEADER_SIZE + payload_length + signature_size + 2)]
+        &mut self.0[(1 + Self::HEADER_SIZE)
+            ..(1 + Self::HEADER_SIZE + payload_length + signature_length + 2)]
     }
 
     #[inline]
