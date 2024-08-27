@@ -875,7 +875,10 @@ fn read_v2_raw_message_inner<M: Message, R: Read>(
 ///
 /// V2 maximum size is 280 bytes: `<https://mavlink.io/en/guide/serialization.html>`
 #[cfg(feature = "tokio-1")]
-pub async fn read_v2_raw_message_async<M: Message, R: tokio::io::AsyncReadExt + Unpin>(
+pub async fn read_v2_raw_message_async<
+    M: Message,
+    R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
+>(
     reader: &mut R,
 ) -> Result<MAVLinkV2MessageRaw, error::MessageReadError> {
     read_v2_raw_message_async_inner::<M, R>(reader, None).await
@@ -884,10 +887,15 @@ pub async fn read_v2_raw_message_async<M: Message, R: tokio::io::AsyncReadExt + 
 /// Async read a raw buffer with the mavlink message
 /// V2 maximum size is 280 bytes: `<https://mavlink.io/en/guide/serialization.html>`
 #[cfg(feature = "tokio-1")]
-async fn read_v2_raw_message_async_inner<M: Message, R: tokio::io::AsyncReadExt + Unpin>(
+async fn read_v2_raw_message_async_inner<
+    M: Message,
+    R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
+>(
     reader: &mut R,
-    signing_data: Option<&SigningData>,
+    #[allow(unused_variables)] signing_data: Option<&SigningData>,
 ) -> Result<MAVLinkV2MessageRaw, error::MessageReadError> {
+    use tokio::io::{AsyncReadExt, AsyncSeekExt};
+
     loop {
         loop {
             // search for the magic framing value indicating start of mavlink message
@@ -898,12 +906,21 @@ async fn read_v2_raw_message_async_inner<M: Message, R: tokio::io::AsyncReadExt 
 
         let mut message = MAVLinkV2MessageRaw::new();
 
+        let start_position = reader
+            .stream_position()
+            .await
+            .map_err(error::MessageReadError::Io)?;
+
         message.0[0] = MAV_STX_V2;
         let header_len = reader.read_exact(message.mut_header()).await?;
         assert_eq!(header_len, MAVLinkV2MessageRaw::HEADER_SIZE);
 
         if message.incompatibility_flags() & !MAVLINK_SUPPORTED_IFLAGS > 0 {
             // if there are incompatibility flags set that we do not know discard the message
+            reader
+                .seek(std::io::SeekFrom::Start(start_position))
+                .await
+                .map_err(error::MessageReadError::Io)?;
             continue;
         }
 
@@ -912,12 +929,20 @@ async fn read_v2_raw_message_async_inner<M: Message, R: tokio::io::AsyncReadExt 
             .await?;
 
         if !message.has_valid_crc::<M>() {
+            reader
+                .seek(std::io::SeekFrom::Start(start_position))
+                .await
+                .map_err(error::MessageReadError::Io)?;
             continue;
         }
 
         #[cfg(feature = "signing")]
         if let Some(signing_data) = signing_data {
             if !signing_data.verify_signature(&message) {
+                reader
+                    .seek(std::io::SeekFrom::Start(start))
+                    .await
+                    .map_err(error::MessageReadError::Io)?;
                 continue;
             }
         }
@@ -929,7 +954,10 @@ async fn read_v2_raw_message_async_inner<M: Message, R: tokio::io::AsyncReadExt 
 /// Async read a raw buffer with the mavlink message with signing support
 /// V2 maximum size is 280 bytes: `<https://mavlink.io/en/guide/serialization.html>`
 #[cfg(all(feature = "tokio-1", feature = "signing"))]
-pub async fn read_v2_raw_message_async_signed<M: Message, R: tokio::io::AsyncReadExt + Unpin>(
+pub async fn read_v2_raw_message_async_signed<
+    M: Message,
+    R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
+>(
     reader: &mut R,
     signing_data: Option<&SigningData>,
 ) -> Result<MAVLinkV2MessageRaw, error::MessageReadError> {
@@ -1020,7 +1048,10 @@ fn read_v2_msg_inner<M: Message, R: Read>(
 
 /// Async read a MAVLink v2  message from a Read stream.
 #[cfg(feature = "tokio-1")]
-pub async fn read_v2_msg_async<M: Message, R: tokio::io::AsyncReadExt + Unpin>(
+pub async fn read_v2_msg_async<
+    M: Message,
+    R: tokio::io::AsyncRead + tokio::io::AsyncSeek + Unpin,
+>(
     read: &mut R,
 ) -> Result<(MavHeader, M), error::MessageReadError> {
     let message = read_v2_raw_message_async::<M, _>(read).await?;
@@ -1170,11 +1201,13 @@ pub fn write_v2_msg_signed<M: Message, W: Write>(
 
 /// Async write a MAVLink v2 message to a Write stream.
 #[cfg(feature = "tokio-1")]
-pub async fn write_v2_msg_async<M: Message, W: tokio::io::AsyncWriteExt + Unpin>(
+pub async fn write_v2_msg_async<M: Message, W: tokio::io::AsyncWrite + Unpin>(
     w: &mut W,
     header: MavHeader,
     data: &M,
 ) -> Result<usize, error::MessageWriteError> {
+    use tokio::io::AsyncWriteExt;
+
     let mut message_raw = MAVLinkV2MessageRaw::new();
     message_raw.serialize_message(header, data);
 
@@ -1228,11 +1261,13 @@ pub fn write_v1_msg<M: Message, W: Write>(
 
 /// Async write a MAVLink v1 message to a Write stream.
 #[cfg(feature = "tokio-1")]
-pub async fn write_v1_msg_async<M: Message, W: tokio::io::AsyncWriteExt + Unpin>(
+pub async fn write_v1_msg_async<M: Message, W: tokio::io::AsyncWrite + Unpin>(
     w: &mut W,
     header: MavHeader,
     data: &M,
 ) -> Result<usize, error::MessageWriteError> {
+    use tokio::io::AsyncWriteExt;
+
     let mut message_raw = MAVLinkV1MessageRaw::new();
     message_raw.serialize_message(header, data);
 
