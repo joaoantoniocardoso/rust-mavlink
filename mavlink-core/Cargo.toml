@@ -42,4 +42,4 @@ sha2 = { version = "0.10", optional = true }
 "serde" = ["dep:serde", "dep:serde_arrays"]
 "tokio-1" = ["dep:tokio"]
 "signing" = ["dep:sha2"]
-default = ["std", "tcp", "udp", "direct-serial", "serde"]
+default = ["std", "tcp", "udp", "direct-serial", "serde", "tokio-1"]

@@ -2,11 +2,26 @@ use core::fmt::{Display, Formatter};
 #[cfg(feature = "std")]
 use std::error::Error;
 
+use crate::MAVLinkMessageRaw;
+
 #[derive(Debug)]
 pub enum ParserError {
-    InvalidFlag { flag_type: &'static str, value: u32 },
-    InvalidEnum { enum_type: &'static str, value: u32 },
-    UnknownMessage { id: u32 },
+    InvalidFlag {
+        flag_type: &'static str,
+        value: u32,
+    },
+    InvalidEnum {
+        enum_type: &'static str,
+        value: u32,
+    },
+    InvalidCRC {
+        crc: u16,
+        calculated_crc: u16,
+        message: Box<MAVLinkMessageRaw>,
+    },
+    UnknownMessage {
+        id: u32,
+    },
 }
 
 impl Display for ParserError {
@@ -21,6 +36,11 @@ impl Display for ParserError {
                 "Invalid enum value for enum type {enum_type:?}, got {value:?}"
             ),
             Self::UnknownMessage { id } => write!(f, "Unknown message with ID {id:?}"),
+            Self::InvalidCRC {
+                crc,
+                calculated_crc,
+                message: _,
+            } => write!(f, "Invalid CRC value {crc:?}, got {calculated_crc:?}",),
         }
     }
 }

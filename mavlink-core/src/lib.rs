@@ -75,6 +75,12 @@ use sha2::{Digest, Sha256};
 
 pub const MAX_FRAME_SIZE: usize = 280;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MAVLinkMessageRaw {
+    V1(MAVLinkV1MessageRaw),
+    V2(MAVLinkV2MessageRaw),
+}
+
 pub trait Message
 where
     Self: Sized,
@@ -787,13 +793,18 @@ impl MAVLinkV2MessageRaw {
     }
 
     #[inline]
-    pub fn has_valid_crc<M: Message>(&self) -> bool {
+    pub fn has_valid_crc<M: Message>(&self) -> Result<(), u16> {
         let payload_length: usize = self.payload_length().into();
-        self.checksum()
-            == calculate_crc(
-                &self.0[1..(1 + Self::HEADER_SIZE + payload_length)],
-                M::extra_crc(self.message_id()),
-            )
+        let calculated_crc = calculate_crc(
+            &self.0[1..(1 + Self::HEADER_SIZE + payload_length)],
+            M::extra_crc(self.message_id()),
+        );
+
+        if self.checksum() != calculated_crc {
+            return Err(calculated_crc);
+        }
+
+        Ok(())
     }
 
     #[cfg(feature = "signing")]
@@ -943,12 +954,16 @@ fn read_v2_raw_message_inner<M: Message, R: Read>(
             .mut_payload_and_checksum_and_sign()
             .copy_from_slice(payload_and_checksum_and_sign);
 
-        if message.has_valid_crc::<M>() {
-            // even if the signature turn out to be invalid the valid crc shows that the received data presents a valid message as opposed to random bytes
-            reader.consume(message.raw_bytes().len() - 1);
-        } else {
-            continue;
-        }
+        message.has_valid_crc::<M>().map_err(|calculated_crc| {
+            error::MessageReadError::Parse(ParserError::InvalidCRC {
+                crc: message.checksum(),
+                calculated_crc,
+                message: Box::new(MAVLinkMessageRaw::V2(message)),
+            })
+        })?;
+
+        // even if the signature turn out to be invalid, the valid crc shows that the received data presents a valid message as opposed to random bytes
+        reader.consume(message.raw_bytes().len() - 1);
 
         #[cfg(feature = "signing")]
         if let Some(signing_data) = signing_data {
@@ -1005,12 +1020,16 @@ async fn read_v2_raw_message_async_inner<M: Message, R: tokio::io::AsyncReadExt 
             .mut_payload_and_checksum_and_sign()
             .copy_from_slice(payload_and_checksum_and_sign);
 
-        if message.has_valid_crc::<M>() {
-            // even if the signature turn out to be invalid the valid crc shows that the received data presents a valid message as opposed to random bytes
-            reader.consume(message.raw_bytes().len() - 1);
-        } else {
-            continue;
-        }
+        message.has_valid_crc::<M>().map_err(|calculated_crc| {
+            error::MessageReadError::Parse(ParserError::InvalidCRC {
+                crc: message.checksum(),
+                calculated_crc,
+                message: Box::new(MAVLinkMessageRaw::V2(message)),
+            })
+        })?;
+
+        // even if the signature turn out to be invalid, the valid crc shows that the received data presents a valid message as opposed to random bytes
+        reader.consume(message.raw_bytes().len() - 1);
 
         #[cfg(feature = "signing")]
         if let Some(signing_data) = signing_data {
