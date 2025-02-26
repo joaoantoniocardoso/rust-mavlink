@@ -395,6 +395,11 @@ impl MAVLinkV1MessageRaw {
         &self.0[..(1 + Self::HEADER_SIZE + payload_length + 2)]
     }
 
+    pub fn raw_bytes_mut(&mut self) -> &mut [u8] {
+        let payload_length = self.payload_length() as usize;
+        &mut self.0[..(1 + Self::HEADER_SIZE + payload_length + 2)]
+    }
+
     fn serialize_stx_and_header_and_crc(
         &mut self,
         header: MavHeader,
@@ -815,6 +820,18 @@ impl MAVLinkV2MessageRaw {
         };
 
         &self.0[..(1 + Self::HEADER_SIZE + payload_length + signature_size + 2)]
+    }
+
+    pub fn raw_bytes_mut(&mut self) -> &mut [u8] {
+        let payload_length = self.payload_length() as usize;
+
+        let signature_size = if (self.incompatibility_flags() & MAVLINK_IFLAG_SIGNED) == 0 {
+            0
+        } else {
+            Self::SIGNATURE_SIZE
+        };
+
+        &mut self.0[..(1 + Self::HEADER_SIZE + payload_length + signature_size + 2)]
     }
 
     fn serialize_stx_and_header_and_crc(
